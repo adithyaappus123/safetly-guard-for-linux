@@ -1,45 +1,162 @@
-# Responsiveness Guard
+Responsiveness Guard System
 
-A minimal, end-to-end Linux system stability tool that monitors process CPU usage and automatically throttles offenders using `cgroup v2`.
+ Overview
+The Responsiveness Guard System is a Linux-based performance management framework designed to keep a system responsive under high load. It continuously monitors system activity, detects performance degradation (such as input lag or CPU starvation), and dynamically controls misbehaving processes using modern Linux kernel mechanisms.
 
-## Project Structure
+The system is especially useful for desktops, developer machines, and interactive environments where user experience must be preserved even when background tasks consume heavy resources.
 
-- **`antigravity_monitor.py`**: A high-level abstraction API ("Antigravity API") for standard Linux kernel metrics (`/proc`).
-- **`proc_scanner.py`**: Scans the process table efficiently.
-- **`cpu_detector.py`**: Stateful engine that calculates delta CPU usage per process.
-- **`rule_engine.py`**: Evaluates business logic (e.g., `CPU > 70%`).
-- **`cgroup_limiter.sh`**: The enforcement mechanism using pure Bash and cgroup v2.
-- **`main.py`**: The conductor that runs the monitoring loop.
+ Key Goals
+- Maintain smooth user interaction
+- Detect and mitigate input lag and CPU contention
+- Prevent background tasks from degrading system responsiveness
+- Apply controls safely and automatically recover when load decreases
 
-## Architecture Flow
+ High-Level Architecture
+The system is organized into four logical layers:
 
-1. **Collect**: `main.py` asks `proc_scanner` for active PIDs.
-2. **Measure**: `antigravity_monitor` reads kernel counters; `cpu_detector` computes the delta over time.
-3. **Decide**: `rule_engine` checks if usage > 70%.
-4. **Act**: If violated, `cgroup_limiter.sh` writes the PID to the `responsiveness-guard` cgroup, capping it at 50% CPU.
+1. Monitoring Layer – collects real-time system data
+2. Detection Engine – analyzes metrics and makes decisions
+3. Control Layer – applies throttling and recovery actions
+4. Linux Kernel Interfaces – enforces actions at kernel level
 
-## How to Run
+Each layer has a clear responsibility and communicates through well-defined data flow.
 
-### Prerequisites
-- Linux Kernel 4.15+ (cgroup v2 support).
-- Root privileges (for cgroup file writing).
-- Python 3.
 
-### Running the Demo
-```bash
-# 1. Start the guard (requires root for real enforcement)
-sudo python3 main.py
-```
 
-### Simulating a CPU Spike
-In another terminal:
-```bash
-# Generate 100% CPU load (1 core)
-yes > /dev/null &
-# Watch main.py detect and throttle it!
-```
+ 1. Monitoring Layer
+ Purpose
+Collect real-time metrics about system performance, process behavior, and user activity with minimal overhead.
 
-## Safety
-- Does **not** kill processes (`kill -9` is avoided).
-- Uses standard Linux kernel features (cgroups) for "soft" control.
-- Degrades gracefully if metrics are unavailable.
+ Components
+ eBPF Monitor
+- Tracks CPU cycles, wakeups, and run queue pressure
+- Uses eBPF for efficient kernel-level monitoring
+
+ /proc Scanner
+- Reads process information from `/proc`
+- Collects CPU usage, memory stats, and I/O statistics
+
+ System Events Tracker
+- Monitors keyboard input, mouse activity, and window focus changes
+- Helps determine whether the user is actively interacting with the system
+
+ Metrics Aggregator
+- Runs at a fixed interval (e.g., every 10 ms)
+- Maintains process tables
+- Computes performance scores and lag indicators
+
+Output: Normalized metrics and scores per process
+
+ 2. Detection Engine
+ Purpose
+Analyze collected metrics to identify responsiveness issues and determine corrective actions.
+
+ Components
+ Process Classifier
+Categorizes processes into:
+- GUI applications
+- CLI applications
+- Background jobs
+- System services
+
+This helps prioritize user-facing workloads.
+
+ Rule Engine
+Applies threshold-based rules such as:
+- CPU usage > 70%
+- Run queue length > 5
+- Input latency > 100 ms
+
+Processes violating rules are flagged.
+ Context-Aware Logic
+Considers system context:
+- User activity state
+- Time of day
+- Overall system load
+
+This prevents unnecessary throttling during acceptable high-load scenarios.
+ Decision Maker
+- Determines throttling intensity
+- Selects target processes
+- Assigns priorities
+
+Output: Throttle and control commands
+
+
+
+ 3. Control Layer
+ Purpose
+Safely apply performance controls while ensuring system stability and reversibility.
+
+ Components
+ Gradual Throttler
+- Applies incremental adjustments
+- Modifies process priority (nice values)
+- Applies cgroup resource limits
+- Supports CPU core isolation when needed
+
+ Safety Manager
+- Uses watchdog timers
+- Monitors system health
+- Automatically rolls back changes on failure
+
+ Recovery Manager
+- Removes throttles when conditions normalize
+- Performs timeout checks
+- Restores original process states
+
+ Linux Kernel Integration
+Acts as an abstraction layer over kernel APIs, ensuring controlled and consistent enforcement.
+
+
+
+ 4. Linux Kernel Interfaces
+ Purpose
+Directly enforce decisions using native Linux kernel mechanisms.
+ Components
+ cgroup v2 API
+Controls resource allocation using:
+- `cpu.max`
+- `memory.max`
+- `io.max`
+- `pids.max`
+
+ Process Scheduler API
+Adjusts scheduling behavior via:
+- `sched_setscheduler()`
+- `sched_setaffinity()`
+- `setpriority()`
+
+ eBPF Runtime
+- Uses BPF system calls
+- Maintains BPF maps
+- Attaches tracepoints and kprobes
+
+
+ Data Flow Summary
+1. System metrics are collected in real time
+2. Metrics are analyzed for responsiveness issues
+3. Decisions are made based on rules and context
+4. Kernel-level controls are applied
+5. System recovers automatically when load decreases
+
+ Technologies Used
+- Linux Kernel APIs
+- eBPF (Extended Berkeley Packet Filter)
+- cgroup v2
+- procfs
+- Linux Scheduler
+
+Use Cases
+- Desktop and laptop performance management
+- Developer workstations
+- Systems running heavy background workloads
+- Interactive Linux environments
+
+ Future Enhancements
+- Machine learning–based anomaly detection
+- User-configurable policies
+- Visualization dashboard
+- Per-application responsiveness profiles#
+
+- ![WhatsApp Image 2026-01-31 at 10 15 27 PM](https://github.com/user-attachments/assets/b9adc603-a2ae-48b7-8bc1-97f21a023f31)
